@@ -1,0 +1,5 @@
+pip==24.2
+setuptools==72.1.0
+websocket-client==1.8.0
+wheel==0.43.0
+pandas~=2.2.2
