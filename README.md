@@ -123,4 +123,4 @@ Ensure that these steps are carefully followed on both your local machine and th
     ```bash
     python app.py
     ```
-2. Refer to the Documentations for specific API calls and usage examples.
+2. Refer to the [Examples](Examples.ipynb) for usage examples.

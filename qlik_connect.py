@@ -18,6 +18,7 @@ class QlikConnect:
         self.proxy_prefix = proxy_prefix
         self.ws = None
         self.qlik_global_context = -1  # entry point for base functionality like "OpenDoc"
+        self.session_object_handle = None  # will be assigned dynamically
 
         # API URL
         self.engine_api_url = f"wss://{self.domain}/{self.proxy_prefix}/app/{self.app_id}/"
@@ -93,7 +94,7 @@ class QlikConnect:
             "method": "ExportData",
             "handle": 1,
             "params": [
-                "CSV_T",  # File type, "CSV_C" for CSV with commas, OOXML for Excel, CSV_T for tabs
+                "CSV_T",  # File type, "CSV_C" for CSV with commas, OOXML for Excel, CSV_T for CSV with tabs
                 "/qHyperCubeDef",  # Path to the object's data definition
                 "DataExport.csv"  # File name (optional, not used in some setups)
             ]
@@ -129,102 +130,35 @@ class QlikConnect:
 
         self.msg_create_session_object = {
             "jsonrpc": "2.0",
-            "id": 1,
+            "id": 17,
             "method": "CreateSessionObject",
             "handle": 1,
             "params": [
                 {
-                    "qInfo": {
-                        "qId": "",
-                        "qType": "Chart"
-                    },
+                    "qInfo": {"qType": "myCube"},
                     "qHyperCubeDef": {
-                        "qStateName": "$",
-                        "qDimensions": [
-                            {
-                                "qLibraryId": "",
-                                "qNullSuppression": False,
-                                "qDef": {
-                                    "qGrouping": "N",
-                                    "qFieldDefs": [
-                                        None
-                                    ],
-                                    "qFieldLabels": [
-                                        None
-                                    ]
-                                }
-                            }
-                        ],
-                        "qMeasures": [
-                            {
-                                "qLibraryId": "",
-                                "qSortBy": {
-                                    "qSortByState": 0,
-                                    "qSortByFrequency": 0,
-                                    "qSortByNumeric": 0,
-                                    "qSortByAscii": 0,
-                                    "qSortByLoadOrder": 1,
-                                    "qSortByExpression": 0,
-                                    "qExpression": {
-                                        "qv": ""
-                                    }
-                                },
-                                "qDef": {
-                                    "qLabel": "",
-                                    "qDescription": "",
-                                    "qTags": [
-                                        "tags"
-                                    ],
-                                    "qGrouping": "N",
-                                    "qDef": None
-                                }
-                            },
-                            {
-                                "qLibraryId": "",
-                                "qSortBy": {
-                                    "qSortByState": 0,
-                                    "qSortByFrequency": 0,
-                                    "qSortByNumeric": 0,
-                                    "qSortByAscii": 0,
-                                    "qSortByLoadOrder": 1,
-                                    "qSortByExpression": 0,
-                                    "qExpression": {
-                                        "qv": ""
-                                    }
-                                },
-                                "qDef": {
-                                    "qLabel": "",
-                                    "qDescription": "",
-                                    "qTags": [
-                                        "tags"
-                                    ],
-                                    "qGrouping": "N",
-                                    "qDef": ""
-                                }
-                            }
-                        ],
-                        "qInitialDataFetch": [
-                            {
-                                "qTop": 0,
-                                "qLeft": 0,
-                                "qHeight": 3,
-                                "qWidth": 1
-                            },
-                            {
-                                "qTop": 0,
-                                "qLeft": 0,
-                                "qHeight": 0,
-                                "qWidth": 0
-                            },
-                            {
-                                "qTop": 0,
-                                "qLeft": 0,
-                                "qHeight": 0,
-                                "qWidth": 0
-                            }
-                        ]
+                        "qDimensions":
+                            [],  # Dimensions will be assigned dynamically
+                        "qMeasures":
+                            []  # Measures will be assigned dynamically
                     }
                 }
+            ]
+        }
+
+        self.msg_get_hypercube_data = {
+            "jsonrpc": "2.0",
+            "id": 21,
+            "method": "GetHyperCubeData",
+            "handle": 3,
+            "params": [
+                "/qHyperCubeDef",
+                [{"qLeft": 0,
+                  "qTop": 0,
+                  "qWidth": 100,
+                  "qHeight": 100
+                  }
+                 ]
             ]
         }
 
@@ -418,58 +352,70 @@ class QlikConnect:
 
         return result
 
-    def create_session_obj(self, field_name, measure_expr):
-        self.msg_create_session_object["params"][0]["qHyperCubeDef"]["qDimensions"][0]["qDef"]["qFieldDefs"] = [field_name]
-        self.msg_create_session_object["params"][0]["qHyperCubeDef"]["qDimensions"][0]["qDef"]["qFieldLabels"] = [field_name]
-        self.msg_create_session_object["params"][0]["qHyperCubeDef"]["qMeasures"][0]["qDef"]["qDef"] = measure_expr
+    def create_session_obj(self, dimensions, measures):
+        self.msg_create_session_object["params"][0]["qHyperCubeDef"]["qDimensions"] = [
+            {"qDef": {"qFieldDefs": [dim]}} for dim in dimensions
+        ]
+        self.msg_create_session_object["params"][0]["qHyperCubeDef"]["qMeasures"] = [
+            {"qDef": {"qDef": measure}} for measure in measures
+        ]
 
         self.ws.send(json.dumps(self.msg_create_session_object))
         result = self.ws.recv()
-        print(json.loads(result))
+        response = json.loads(result)
+        print(response)
+        # Extract the handle
+        self.session_object_handle = response.get('result', {}).get('qReturn', {}).get('qHandle')
 
-    def export_chart_data(self, app_req_handle):
-        # -------------------------------------------------------------------------------------------------------
-        # Exports the data of any generic object to an Excel file or an open XML file.
-        # If the object contains excluded values, those excluded values are not exported.
-        # This API has limited functionality and will not support CSV export from all types of objects.
-        # Consider using Excel export instead. Treemap and bar chart are not supported.
-        # -------------------------------------------------------------------------------------------------------
-        layout_json = self.get_layout(app_req_handle)
-        list_of_charts = layout_json['result']['qLayout']['qAppObjectList']['qItems'][0]['qData']['cells']
-        id = 6
+    def get_hypercube_data(self):
+        if not self.session_object_handle:
+            print("Session object handle not set. Create a session object first.")
+            return None
 
-        for chart in list_of_charts:
-            obj_req = {
-                "jsonrpc": "2.0",
-                "method": "GetObject",
-                "handle": app_req_handle,
-                "params": [chart["name"]],
-                "outKey": -1,
-                "id": id
-            }
+        self.msg_get_hypercube_data['handle'] = self.session_object_handle
+        self.ws.send(json.dumps(self.msg_get_hypercube_data))
+        result = self.ws.recv()
+        response = json.loads(result)
+        print(response)
+        return response
 
-            self.ws.send(json.dumps(obj_req))
-            result = json.loads(self.ws.recv())
-            obj_req_handle = result['result']['qReturn']['qHandle']
+    def get_layout(self):
+        if not self.session_object_handle:
+            print("Session object handle not set. Create a session object first.")
+            return None
 
-            export_req = {
-                "jsonrpc": "2.0",
-                "method": "ExportData",
-                "handle": obj_req_handle,
-                "params": ["OOXML"],
-                "outKey": -1,
-                "id": id + 1
-            }
+        self.msg_get_layout['handle'] = self.session_object_handle
+        self.ws.send(json.dumps(self.msg_get_layout))
+        result = self.ws.recv()
+        response = json.loads(result)
+        print(response)
+        return response
 
-            self.ws.send(json.dumps(export_req))
-            result = json.loads(self.ws.recv())
+    def export_hypercube_to_csv(self, file_path='hypercube_data.csv'):
+        data = self.get_hypercube_data()
+        if not data:
+            print("No data received from the hypercube.")
+            return
 
-            download_url = result["result"]["qUrl"]
-            r = requests.get(download_url, allow_redirects=True)
-            with open(f'export_python_{chart["name"]}.xlsx', 'wb') as f:
-                f.write(r.content)
+        # Extract hypercube data from the JSON response
+        data_pages = data.get('result', {}).get('qDataPages', [])
+        if not data_pages:
+            print("No data pages found in the hypercube.")
+            return
 
-            id += 1
+        all_rows = []
+        for page in data_pages:
+            for row in page.get('qMatrix', []):
+                all_rows.append([cell.get('qText') for cell in row])
+
+        # Convert the list of rows to a DataFrame and export to CSV
+        df = pd.DataFrame(all_rows)
+        df.to_csv(file_path, index=False)
+        print(f"Data exported successfully to {file_path}")
+
+    def close_connection(self):
+        if self.ws:
+            self.ws.close()
 
     def close_connection(self):
         if self.ws:
