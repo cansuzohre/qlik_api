@@ -1,4 +1,4 @@
-# Qlik Sense Python API Connection
+# Qlik Sense Python API
 
 This project establishes a secure connection between Qlik Sense and Python, enabling communication via the Qlik Sense Engine API. It allows you to fetch and interact with data from specified pages (such as tables and charts) in the form of hypercubes, using Python to work with Qlik Sense applications and data.
 
