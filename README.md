@@ -27,7 +27,7 @@ To get started, ensure you have the following prerequisites:
 
 ## Installation
 
-1. Clone the repository from Bitbucket to your local machine.
+1. Clone the repository to your local machine.
 2. Create a virtual environment for your python program. 
 3. Install the required dependencies:
     ```bash
